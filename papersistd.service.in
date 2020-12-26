@@ -1,0 +1,10 @@
+[Unit]
+Description=Pulseaudio Persistent default sink Daemon
+BindsTo=pulseaudio.service
+After=pulseaudio.service
+
+[Service]
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/papersistd
+
+[Install]
+WantedBy=pulseaudio.service

@@ -1,0 +1,13 @@
+[requires]
+pulseaudio/13.0
+
+[options]
+pulseaudio:shared=True
+pulseaudio:with_alsa=False
+pulseaudio:with_glib=False
+pulseaudio:with_fftw=False
+pulseaudio:with_x11=False
+pulseaudio:with_openssl=False
+
+[generators]
+pkg_config
