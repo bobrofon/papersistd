@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <memory>
+#include <string_view>
 
 #include <pulse/context.h>
 #include <pulse/introspect.h>
@@ -78,13 +79,18 @@ void DefaultSinkSuccessCb(pa_context* ctx, int success, void* userdata) noexcept
 	SuccessCb("default sink set", ctx, success, userdata);
 }
 
+constexpr bool StartsWith(std::string_view full, std::string_view prefix) noexcept
+{
+	return full.compare(0, prefix.size(), prefix) == 0;
+}
+
 void HandleSink(pa_context* ctx, const pa_sink_info* info, int, void* userdata) {
 	if (!info) {
 		return;
 	}
 	std::cout << info->name << std::endl;
 	auto default_sink = PaDefaultSink();
-	if (default_sink && std::strcmp(info->name, default_sink) == 0) {
+	if (default_sink && StartsWith(info->name, default_sink)) {
 		OperationPtr(pa_context_set_default_sink(ctx, info->name, DefaultSinkSuccessCb, userdata));
 	}
 }
