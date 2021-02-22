@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 #include <cstdlib>
-#include <cstring>
 
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <string_view>
 
@@ -65,6 +65,16 @@ auto OperationPtr(pa_operation* o) noexcept {
 	return "unknown";
 }
 
+struct PaPersistState {
+	pa_mainloop_api* api{};
+	uint32_t currentDefaultIdx{std::numeric_limits<uint32_t>::max()};
+};
+
+struct DefaultSinkArgs {
+	PaPersistState* paPersistState{};
+	uint32_t defaultIdx{std::numeric_limits<uint32_t>::max()};
+};
+
 void SuccessCb(const char* name, pa_context*, int success, void* userdata) noexcept {
 	if (success) {
 		std::clog << name << " succeed" << std::endl;
@@ -76,7 +86,12 @@ void SuccessCb(const char* name, pa_context*, int success, void* userdata) noexc
 }
 
 void DefaultSinkSuccessCb(pa_context* ctx, int success, void* userdata) noexcept {
-	SuccessCb("default sink set", ctx, success, userdata);
+	auto args = std::unique_ptr<DefaultSinkArgs>{static_cast<DefaultSinkArgs*>(userdata)};
+	if (success) {
+		args->paPersistState->currentDefaultIdx = args->defaultIdx;
+		std::clog << "current default sink index: " << args->defaultIdx << std::endl;
+	}
+	SuccessCb("default sink set", ctx, success, args->paPersistState->api);
 }
 
 constexpr bool StartsWith(std::string_view full, std::string_view prefix) noexcept
@@ -88,10 +103,13 @@ void HandleSink(pa_context* ctx, const pa_sink_info* info, int, void* userdata) 
 	if (!info) {
 		return;
 	}
-	std::cout << info->name << std::endl;
+	std::cout << "Handle " << info->index << ": " << info->name << std::endl;
 	auto default_sink = PaDefaultSink();
 	if (default_sink && StartsWith(info->name, default_sink)) {
-		OperationPtr(pa_context_set_default_sink(ctx, info->name, DefaultSinkSuccessCb, userdata));
+		auto paPersistState = static_cast<PaPersistState*>(userdata);
+		auto args = std::make_unique<DefaultSinkArgs>(DefaultSinkArgs{paPersistState, info->index});
+		OperationPtr(pa_context_set_default_sink(
+			ctx, info->name, DefaultSinkSuccessCb, args.release()));
 	}
 }
 
@@ -103,8 +121,9 @@ void CtxStateChanged(pa_context* ctx, void* userdata) {
 	auto state = pa_context_get_state(ctx);
 	std::clog << "context state changed: " << NameOf(state) << std::endl;
 	if (state == PA_CONTEXT_READY) {
-		auto api = static_cast<pa_mainloop_api*>(userdata);
-		OperationPtr(pa_context_subscribe(ctx, PA_SUBSCRIPTION_MASK_SINK, SubSuccessCb, api));
+		auto paPersistState = static_cast<PaPersistState*>(userdata);
+		OperationPtr(pa_context_subscribe(
+			ctx, PA_SUBSCRIPTION_MASK_SINK, SubSuccessCb, paPersistState->api));
 		OperationPtr(pa_context_get_sink_info_list(ctx, HandleSink, userdata));
 	}
 }
@@ -119,6 +138,13 @@ void SubEventCb(pa_context* ctx, pa_subscription_event_type_t t, uint32_t idx, v
 			break;
 		case PA_SUBSCRIPTION_EVENT_REMOVE:
 			std::clog << "removed sink: " << idx << std::endl;
+			auto paPersistState = static_cast<PaPersistState*>(userdata);
+			if (idx == paPersistState->currentDefaultIdx) {
+				paPersistState->currentDefaultIdx = std::numeric_limits<uint32_t>::max();
+				std::clog << "current default sink removed" << std::endl;
+				std::clog << "searching for new sink" << std::endl;
+				OperationPtr(pa_context_get_sink_info_list(ctx, HandleSink, userdata));
+			}
 			break;
 		}
 		break;
@@ -144,8 +170,9 @@ int main() {
 		std::cerr << "pa_context_new failed" << std::endl;
 		return EXIT_FAILURE;
 	}
-	pa_context_set_state_callback(ctx.get(), CtxStateChanged, api);
-	pa_context_set_subscribe_callback(ctx.get(), SubEventCb, api);
+	PaPersistState paPersistState{api};
+	pa_context_set_state_callback(ctx.get(), CtxStateChanged, &paPersistState);
+	pa_context_set_subscribe_callback(ctx.get(), SubEventCb, &paPersistState);
 	auto err = pa_context_connect(ctx.get(), PaServer(),
 		static_cast<pa_context_flags>(PA_CONTEXT_NOAUTOSPAWN | PA_CONTEXT_NOFAIL), nullptr);
 	if (err) {
