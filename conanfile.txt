@@ -1,5 +1,5 @@
 [requires]
-pulseaudio/13.0
+pulseaudio/14.2
 
 [options]
 pulseaudio:shared=True
@@ -8,6 +8,7 @@ pulseaudio:with_glib=False
 pulseaudio:with_fftw=False
 pulseaudio:with_x11=False
 pulseaudio:with_openssl=False
+pulseaudio:with_dbus=False
 
 [generators]
 pkg_config
