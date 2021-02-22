@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <cstdlib>
+#include <cstring>
 
 #include <iostream>
 #include <memory>
@@ -87,21 +88,10 @@ void HandleSink(pa_context* ctx, const pa_sink_info* info, int, void* userdata) 
 	if (!info) {
 		return;
 	}
-	std::cout << "Handle " << info->index << ": " << info->name << std::endl;
+	std::cout << info->name << std::endl;
 	auto default_sink = PaDefaultSink();
 	if (default_sink && StartsWith(info->name, default_sink)) {
 		OperationPtr(pa_context_set_default_sink(ctx, info->name, DefaultSinkSuccessCb, userdata));
-	}
-}
-
-void HandleSinkLost(pa_context* ctx, const pa_sink_info* info, int, void* userdata) {
-	if (!info) {
-		return;
-	}
-	std::cout << "Lost " << info->index << ": " << info->name << std::endl;
-	auto default_sink = PaDefaultSink();
-	if (default_sink && StartsWith(info->name, default_sink)) {
-		OperationPtr(pa_context_get_sink_info_list(ctx, HandleSink, userdata));
 	}
 }
 
@@ -129,7 +119,6 @@ void SubEventCb(pa_context* ctx, pa_subscription_event_type_t t, uint32_t idx, v
 			break;
 		case PA_SUBSCRIPTION_EVENT_REMOVE:
 			std::clog << "removed sink: " << idx << std::endl;
-			OperationPtr(pa_context_get_sink_info_by_index(ctx, idx, HandleSinkLost, userdata));
 			break;
 		}
 		break;
